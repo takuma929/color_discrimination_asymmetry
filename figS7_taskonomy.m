@@ -1,30 +1,14 @@
 %% figS7_taskonomy.m
-% Summary scatter of all Taskonomy-trained tasks in the hue/chroma ratio plane,
-% together with the human psychophysics mean and the MEG mean.
+% Figure S7: hue-to-chroma sensitivity ratios across the 24 Taskonomy-trained
+% tasks. Each task contributes one point, taken at the processing depth whose
+% (purple, orange) ratio lies closest to the human psychophysical mean (its most
+% human-like depth), colored by which depth that was (Layer 1 / Block 1-4). The
+% human psychophysics mean and the MEG mean are overlaid for reference.
 %
-% Each Taskonomy task contributes one point (averaged across depths and
-% iterations), colored by the UNSUPERVISED CLUSTER it belongs to. The clustering
-% is computed in taskonomyClustering.m and shared with
-% figS8_taskonomy_24tasks_layer_clustered.m, so the two figures use identical
-% cluster assignments and colors.
-%
-% Coordinates are computed exactly as in fig8_human_network.m:
+% Coordinates are computed as in fig8_human_network.m:
 %   sensitivity   = 1 / threshold
 %   plotted value = log10(hue sensitivity / chroma sensitivity)
 % with purple on the x-axis and orange on the y-axis.
-%
-% Three figures are produced:
-%   figS7_taskonomy            - one point per task, averaged across depths,
-%                                colored by its unsupervised cluster.
-%   figS7_taskonomy_bestlayer  - one point per task at its BEST processing depth
-%                                (the depth with the highest orange hue/chroma
-%                                ratio), colored by which layer that was
-%                                (Layer 0 / Block 1-4, per the architecture
-%                                figure; Layer 0 shown gray since black = human).
-%   figS7_taskonomy_humanlayer - one point per task at the processing depth most
-%                                SIMILAR TO HUMAN (the depth whose (purple,orange)
-%                                point is closest to the human mean), colored by
-%                                which layer that was, as above.
 %
 % Standard-error bars on the task markers can be toggled with showErrorBars.
 %
@@ -55,7 +39,8 @@ doSave = true;
 twocolumn = 17.8;
 
 % Whether to label each point with its task name in the best-layer figure.
-showBestLayerTaskNames = true;
+% Off by default to match the manuscript figure (no per-task labels).
+showBestLayerTaskNames = false;
 
 % Whether to draw standard-error bars on the Taskonomy task markers.
 showErrorBars = false;
@@ -89,16 +74,8 @@ T.sign = lower(string(T.direction));
 % Participant-aligned MEG log-odds ratios from the main MEG analysis.
 [xMEG, yMEG, hasMEG] = loadMegLogOdds(meg_mat, H_HSI.ptID, meg_time_window, meg_step_idx);
 
-% One point per Taskonomy-trained task, averaged across iterations and depths.
-taskonomyHSI_all = taskonomySensitivityHSI(taskonomy_csv);
-
-% Unsupervised clustering of all tasks by their layer profiles (shared with
-% figS8_taskonomy_24tasks_layer_clustered.m).
-C = taskonomyClustering(taskonomy_csv);
-
-% Per task, per depth (for the best-layer figure below): one (purple, orange)
-% point at every processing depth, used to pick the layer closest to the human
-% psychophysics mean.
+% Per task, per depth: one (purple, orange) point at every processing depth,
+% used to pick the layer closest to the human psychophysics mean.
 taskonomyHSI_depth = taskonomyDepthHSI(taskonomy_csv);
 humanMean = [mean(xHuman, 'omitnan'), mean(yHuman, 'omitnan')];
 
@@ -108,34 +85,20 @@ if doSave && ~exist(outdir, 'dir')
     mkdir(outdir);
 end
 
-% Average across all depths: one point per task, colored by its cluster.
-fig = plotTaskonomyClusterScatter(xHuman, yHuman, xMEG, yMEG, hasMEG, ...
-    taskonomyHSI_all, C, twocolumn, showErrorBars);
-
-% Best layer per task: the processing depth with the highest orange hue/chroma
-% ratio, colored by which layer (Layer 0 / Block 1-4) it was.
-figBest = plotTaskonomyBestLayer(humanMean, xMEG, yMEG, hasMEG, ...
-    taskonomyHSI_depth, twocolumn, showBestLayerTaskNames, showErrorBars, 'orange');
-
 % Most human-like layer per task: the processing depth whose (purple, orange)
-% point lies closest to the human mean, colored by which layer it was.
+% point lies closest to the human mean, colored by which layer it was. This is
+% the figure shown as Figure S7 in the manuscript.
 figHuman = plotTaskonomyBestLayer(humanMean, xMEG, yMEG, hasMEG, ...
     taskonomyHSI_depth, twocolumn, showBestLayerTaskNames, showErrorBars, 'humansim');
 
 if doSave
     pause(0.1)
-    exportgraphics(fig, fullfile(outdir, 'figS7_taskonomy.pdf'), ...
-        'ContentType', 'vector', 'BackgroundColor', 'none');
-    exportgraphics(fig, fullfile(outdir, 'figS7_taskonomy.png'), ...
-        'ContentType', 'image', 'BackgroundColor', 'none', 'Resolution', 600);
-    exportgraphics(figBest, fullfile(outdir, 'figS7_taskonomy_bestlayer.pdf'), ...
-        'ContentType', 'vector', 'BackgroundColor', 'none');
-    exportgraphics(figBest, fullfile(outdir, 'figS7_taskonomy_bestlayer.png'), ...
-        'ContentType', 'image', 'BackgroundColor', 'none', 'Resolution', 600);
     exportgraphics(figHuman, fullfile(outdir, 'figS7_taskonomy_humanlayer.pdf'), ...
         'ContentType', 'vector', 'BackgroundColor', 'none');
+    fprintf('%s successfully saved.\n', 'figS7_taskonomy_humanlayer.pdf');
     exportgraphics(figHuman, fullfile(outdir, 'figS7_taskonomy_humanlayer.png'), ...
         'ContentType', 'image', 'BackgroundColor', 'none', 'Resolution', 600);
+    fprintf('%s successfully saved.\n', 'figS7_taskonomy_humanlayer.png');
 end
 
 %% ------------------------- HUMAN HELPERS --------------------------------
@@ -160,253 +123,10 @@ end
 
 %% ------------------------- TASKONOMY HELPERS ----------------------------
 
-function H = taskonomySensitivityHSI(taskonomy_csv, requestedDepths)
-    % Load the all-task Taskonomy threshold table and compute one hue/chroma
-    % ratio point per task, averaged across iterations and available depths.
-    if nargin < 2
-        requestedDepths = strings(0, 1);
-    end
-
-    assert(isfile(taskonomy_csv), 'Taskonomy CSV not found: %s', taskonomy_csv);
-
-    N = readtable(taskonomy_csv, 'TextType', 'string');
-    N.Properties.VariableNames = matlab.lang.makeValidName(N.Properties.VariableNames);
-    N.task = string(N.task);
-    N.depth = lower(string(N.depth));
-    N.refLabel = lower(string(N.quadrant));
-    N.dir = lower(string(N.direction));
-    N.threshold_mean = N.threshold;
-
-    % Exclude the colorization task from figS7 (kept in figS8).
-    N = N(lower(N.task) ~= "colorization", :);
-
-    tasks = unique(N.task, 'stable');
-
-    H = repmat(struct('task', "", 'x', NaN, 'y', NaN, 'xSE', NaN, 'ySE', NaN), ...
-        numel(tasks), 1);
-
-    epsDen = 1e-12;
-    for iTask = 1:numel(tasks)
-        rowsTask = N(N.task == tasks(iTask), :);
-        iters = unique(rowsTask.iter, 'stable');
-        depths = localOrderedDepths(unique(rowsTask.depth, 'stable'));
-        if ~isempty(requestedDepths)
-            depths = depths(ismember(depths, lower(string(requestedDepths))));
-        end
-
-        xVals = [];
-        yVals = [];
-        for iIter = 1:numel(iters)
-            for iDepth = 1:numel(depths)
-                rows = rowsTask(rowsTask.iter == iters(iIter) & rowsTask.depth == depths(iDepth), :);
-                if isempty(rows)
-                    continue
-                end
-
-                S = networkThresholdStruct(rows);
-                mp = meanOfTwo(S.purple.chroma.pos.mean, S.purple.chroma.neg.mean);
-                hp = meanOfTwo(S.purple.hue.pos.mean, S.purple.hue.neg.mean);
-                mo = meanOfTwo(S.orange.chroma.pos.mean, S.orange.chroma.neg.mean);
-                ho = meanOfTwo(S.orange.hue.pos.mean, S.orange.hue.neg.mean);
-
-                purpleHueSensitivity = 1 / max(hp, epsDen);
-                purpleChromaSensitivity = 1 / max(mp, epsDen);
-                orangeHueSensitivity = 1 / max(ho, epsDen);
-                orangeChromaSensitivity = 1 / max(mo, epsDen);
-
-                xi = log10(purpleHueSensitivity / max(purpleChromaSensitivity, epsDen));
-                yi = log10(orangeHueSensitivity / max(orangeChromaSensitivity, epsDen));
-
-                if isfinite(xi) && isfinite(yi)
-                    xVals(end+1) = xi; %#ok<AGROW>
-                    yVals(end+1) = yi; %#ok<AGROW>
-                end
-            end
-        end
-
-        H(iTask).task = tasks(iTask);
-        H(iTask).x = mean(xVals, 'omitnan');
-        H(iTask).y = mean(yVals, 'omitnan');
-        H(iTask).xSE = localStandardError(xVals);
-        H(iTask).ySE = localStandardError(yVals);
-    end
-end
-
-function depths = localOrderedDepths(depths)
-    dmid = setdiff(depths, ["stem","fc"], 'stable');
-    if any(depths == "stem"), dmid = ["stem"; dmid]; end
-    if any(depths == "fc"), dmid = [dmid; "fc"]; end
-    depths = dmid;
-end
-
-function se = localStandardError(vals)
-    vals = vals(isfinite(vals));
-    if isempty(vals)
-        se = NaN;
-    else
-        se = std(vals, 'omitnan') / sqrt(numel(vals));
-    end
-end
-
-function Sdepth = networkThresholdStruct(Nrows)
-    % Convert rows for one network layer into a nested threshold struct.
-    refs = unique(Nrows.refLabel);
-    Sdepth = struct();
-    for i = 1:numel(refs)
-        r = refs(i);
-        R = Nrows(Nrows.refLabel == r, :);
-        Sdepth.(r).chroma.pos = getDirStats(R, "chroma_plus");
-        Sdepth.(r).chroma.neg = getDirStats(R, "chroma_minus");
-        Sdepth.(r).hue.pos = getDirStats(R, "hue_plus");
-        Sdepth.(r).hue.neg = getDirStats(R, "hue_minus");
-    end
-end
-
-function st = getDirStats(T, dirName)
-    % Extract the mean threshold for one named DKL direction.
-    idx = lower(string(T.dir)) == dirName;
-    st.mean = mean(T.threshold_mean(idx), 'omitnan');
-end
-
-function m = meanOfTwo(m1, m2)
-    % Average positive and negative directions for one axis.
-    m = mean([m1, m2], 'omitnan');
-end
-
-%% ------------------------- MEG HELPERS ----------------------------------
-
-function [xMEG, yMEG, hasMEG] = loadMegLogOdds(meg_mat, humanIDs, timeWindow, stepIdx)
-    % Load participant-level MEG log-odds ratios for a chosen time window and
-    % step, aligned to the human participant order.
-    assert(isfile(meg_mat), 'MEG log odds ratio MAT not found: %s', meg_mat);
-    M = load(meg_mat);
-    if isfield(M, 'logoddsratios')
-        logoddsratios = M.logoddsratios;
-    elseif isfield(M, 'logoddsratio')
-        logoddsratios = M.logoddsratio;
-    else
-        error('No logoddsratios/logoddsratio variable found in %s', meg_mat);
-    end
-    assert(isfield(M, 'subs'), 'No subs variable found in %s', meg_mat);
-    assert(isfield(M, 'timeWin'), 'No timeWin variable found in %s', meg_mat);
-
-    if isempty(stepIdx)
-        stepIdx = 1:size(logoddsratios, 4);
-    end
-    timeIdx = M.timeWin(:,1) >= timeWindow(1) & M.timeWin(:,2) <= timeWindow(2);
-    assert(any(timeIdx), 'No MEG time windows found within %.3f-%.3f s', timeWindow(1), timeWindow(2));
-
-    % Color index 1 is orange/y; color index 2 is purple/x.
-    megOrange = squeeze(mean(mean(logoddsratios(:,1,timeIdx,stepIdx), 3, 'omitnan'), 4, 'omitnan'));
-    megPurple = squeeze(mean(mean(logoddsratios(:,2,timeIdx,stepIdx), 3, 'omitnan'), 4, 'omitnan'));
-
-    humanIDs = string(humanIDs);
-    megIDs = string(M.subs(:));
-    xMEG = nan(size(humanIDs));
-    yMEG = nan(size(humanIDs));
-    [hasMEG, loc] = ismember(humanIDs, megIDs);
-    xMEG(hasMEG) = megPurple(loc(hasMEG));
-    yMEG(hasMEG) = megOrange(loc(hasMEG));
-    hasMEG = hasMEG & isfinite(xMEG) & isfinite(yMEG);
-end
-
-%% ------------------------- PLOTTING HELPERS -----------------------------
-
-function fig = plotTaskonomyClusterScatter(xHuman, yHuman, xMEG, yMEG, hasMEG, taskonomyHSI, C, twocolumn, showErrorBars)
-    % Scatter of human mean, MEG mean, and one diamond per Taskonomy task in the
-    % hue/chroma ratio plane. Each task is colored by its unsupervised cluster
-    % (from taskonomyClustering.m), with optional SE bars and a per-cluster legend.
-    if nargin < 9 || isempty(showErrorBars)
-        showErrorBars = true;
-    end
-    xlims = [-0.25 0.10];
-    ylims = [-0.05 0.30];
-
-    % Map each task name to its cluster index.
-    taskToCluster = containers.Map('KeyType', 'char', 'ValueType', 'double');
-    for i = 1:numel(C.tasks)
-        taskToCluster(char(lower(C.tasks(i)))) = C.clusterId(i);
-    end
-
-    fig = figure('Color', 'w');
-    hold on;
-    axis([xlims ylims]);
-    addBackgroundGuides(xlims, ylims);
-
-    % Human and MEG group means.
-    scatter(mean(xHuman, 'omitnan'), mean(yHuman, 'omitnan'), 80, 'o', 'filled', ...
-        'MarkerFaceColor', 'k', 'MarkerEdgeColor', 'w', 'DisplayName', 'Human mean');
-    if ~isempty(hasMEG) && any(hasMEG)
-        scatter(mean(xMEG(hasMEG), 'omitnan'), mean(yMEG(hasMEG), 'omitnan'), 75, '^', 'filled', ...
-            'MarkerFaceColor', [0.00 0.75 0.85], 'MarkerEdgeColor', 'k', ...
-            'LineWidth', 0.5, 'DisplayName', 'MEG mean');
-    end
-
-    % One diamond per task, colored by its cluster, with SE bars.
-    for iTask = 1:numel(taskonomyHSI)
-        xi = taskonomyHSI(iTask).x;
-        yi = taskonomyHSI(iTask).y;
-        key = char(lower(taskonomyHSI(iTask).task));
-        if ~isfinite(xi) || ~isfinite(yi) || ~isKey(taskToCluster, key)
-            continue
-        end
-        col = C.clusterColors(taskToCluster(key), :);
-        xSE = taskonomyHSI(iTask).xSE;
-        ySE = taskonomyHSI(iTask).ySE;
-        if showErrorBars && isfinite(ySE)
-            errorbar(xi, yi, ySE, ySE, 'Color', col, ...
-                'LineWidth', 0.6, 'CapSize', 0, 'HandleVisibility', 'off');
-        end
-        if showErrorBars && isfinite(xSE)
-            line([xi - xSE, xi + xSE], [yi yi], ...
-                'Color', col, 'LineWidth', 0.6, 'HandleVisibility', 'off');
-        end
-        scatter(xi, yi, 55, 'd', 'filled', 'MarkerFaceColor', col, ...
-            'MarkerEdgeColor', 'k', 'LineWidth', 0.25, 'HandleVisibility', 'off');
-    end
-
-    xlabel('log_1_0 hue / chroma (purple)', 'FontWeight', 'bold');
-    ylabel('log_1_0 hue / chroma (orange)', 'FontWeight', 'bold');
-
-    % Axis ticks: 0.1 step, two-decimal labels.
-    ax = gca;
-    xtick = ceil(xlims(1) / 0.1) * 0.1 : 0.1 : floor(xlims(2) / 0.1) * 0.1;
-    ytick = ceil(ylims(1) / 0.1) * 0.1 : 0.1 : floor(ylims(2) / 0.1) * 0.1;
-    ax.XTick = xtick;
-    ax.YTick = ytick;
-    ax.XLim = xlims;
-    ax.YLim = ylims;
-    ax.XTickLabel = arrayfun(@(v) sprintf('%.2f', v), xtick, 'UniformOutput', false);
-    ax.YTickLabel = arrayfun(@(v) sprintf('%.2f', v), ytick, 'UniformOutput', false);
-    ax.FontName = 'Arial';
-    ax.FontSize = 10;
-    ax.LineWidth = 0.5;
-    ax.XColor = 'k';
-    ax.YColor = 'k';
-    ax.Color = 'none';
-    box on
-    grid minor
-
-    % 0.8 x two-column figure with a square plot box (no legend).
-    figWidth = twocolumn * 0.8;
-    boxSize = figWidth - 1.5 - 0.4;     % left and right margins
-    ax.Units = 'centimeters';
-    ax.Position = [1.5 1.1 boxSize boxSize];
-    axis(ax, 'square');
-
-    figHeight = 1.1 + boxSize + 0.6;
-    fig.PaperType = 'a4';
-    fig.PaperUnits = 'centimeters';
-    fig.Units = 'centimeters';
-    fig.InvertHardcopy = 'off';
-    fig.PaperPosition = [0, 10, figWidth, figHeight];
-    fig.Position = [10, 10, figWidth, figHeight];
-end
-
 function H = taskonomyDepthHSI(taskonomy_csv)
     % Per task, per depth: log10 hue/chroma sensitivity ratio for the purple (x)
     % and orange (y) references, averaged across iterations, plus SE across
-    % iterations. Depths are kept in stem -> layer4 order.
+    % iterations. Depths are kept in layer_1 -> block_4 order.
     assert(isfile(taskonomy_csv), 'Taskonomy CSV not found: %s', taskonomy_csv);
 
     N = readtable(taskonomy_csv, 'TextType', 'string');
@@ -414,7 +134,8 @@ function H = taskonomyDepthHSI(taskonomy_csv)
     N.task = string(N.task);
     N.depth = lower(string(N.depth));
     N.refLabel = lower(string(N.quadrant));
-    N.dir = lower(string(N.direction));
+    N.axis = lower(string(N.hue_chroma));
+    N.sign = lower(string(N.direction));
     N.threshold_mean = N.threshold;
 
     % Exclude the colorization task from figS7 (kept in figS8).
@@ -513,12 +234,12 @@ end
 
 function [order, labels, colors] = layerPalette()
     % Processing depths in the Taskonomy CSV mapped to the ResNet50 architecture
-    % figure's naming and colors. Layer 0 (the stem, drawn black in the
+    % figure's naming and colors. Layer 1 (the the first stage, drawn black in the
     % architecture figure) is shown in GRAY here, because black already denotes
     % the human psychophysics mean.
-    order  = ["stem", "layer1", "layer2", "layer3", "layer4"];
-    labels = ["Layer 0", "Block 1", "Block 2", "Block 3", "Block 4"];
-    colors = [0.45 0.45 0.45;    % Layer 0 (stem)  - gray
+    order  = ["layer_1", "block_1", "block_2", "block_3", "block_4"];
+    labels = ["Layer 1", "Block 1", "Block 2", "Block 3", "Block 4"];
+    colors = [0.45 0.45 0.45;    % Layer 1  - gray
               0.13 0.38 0.78;    % Block 1         - blue
               0.00 0.62 0.50;    % Block 2         - teal/green
               0.87 0.56 0.12;    % Block 3         - tan/gold
@@ -541,7 +262,7 @@ function fig = plotTaskonomyBestLayer(humanMean, xMEG, yMEG, hasMEG, depthHSI, t
     %                orange-region hue superiority).
     %   'humansim' - the depth whose (purple, orange) point is closest to the
     %                human mean (most human-like layer).
-    % Each diamond is colored by which layer that was (Layer 0 / Block 1-4),
+    % Each diamond is colored by which layer that was (Layer 1 / Block 1-4),
     % matching the architecture figure.
     xlims = [-0.22 0.10];
     ylims = [-0.04 0.26];
@@ -668,4 +389,81 @@ function addBackgroundGuides(xlims, ylims)
 
     line([0 0], ylims, 'LineStyle', ':', 'Color', 'k', 'LineWidth', 1, 'HandleVisibility', 'off');
     line(xlims, [0 0], 'LineStyle', ':', 'Color', 'k', 'LineWidth', 1, 'HandleVisibility', 'off');
+end
+
+function depths = localOrderedDepths(depths)
+    dmid = setdiff(depths, ["layer_1","final_layer"], 'stable');
+    if any(depths == "layer_1"), dmid = ["layer_1"; dmid]; end
+    if any(depths == "final_layer"), dmid = [dmid; "final_layer"]; end
+    depths = dmid;
+end
+
+function Sdepth = networkThresholdStruct(Nrows)
+    % Convert rows for one network layer into a nested threshold struct.
+    refs = unique(Nrows.refLabel);
+    Sdepth = struct();
+    for i = 1:numel(refs)
+        r = refs(i);
+        R = Nrows(Nrows.refLabel == r, :);
+        Sdepth.(r).chroma.pos = getDirStats(R, "chroma", "pos");
+        Sdepth.(r).chroma.neg = getDirStats(R, "chroma", "neg");
+        Sdepth.(r).hue.pos = getDirStats(R, "hue", "pos");
+        Sdepth.(r).hue.neg = getDirStats(R, "hue", "neg");
+    end
+end
+
+function st = getDirStats(T, axisName, signName)
+    % Extract the mean threshold for one hue/chroma axis and pos/neg sign.
+    idx = T.axis == axisName & T.sign == signName;
+    st.mean = mean(T.threshold_mean(idx), 'omitnan');
+end
+
+function m = meanOfTwo(m1, m2)
+    % Average positive and negative directions for one axis.
+    m = mean([m1, m2], 'omitnan');
+end
+
+function se = localStandardError(vals)
+    % Standard error of a set of values across iterations (NaN if none).
+    vals = vals(isfinite(vals));
+    if isempty(vals)
+        se = NaN;
+    else
+        se = std(vals, 'omitnan') / sqrt(numel(vals));
+    end
+end
+
+function [xMEG, yMEG, hasMEG] = loadMegLogOdds(meg_mat, humanIDs, timeWindow, stepIdx)
+    % Load participant-level MEG log-odds ratios for a chosen time window and
+    % step, aligned to the human participant order.
+    assert(isfile(meg_mat), 'MEG log odds ratio MAT not found: %s', meg_mat);
+    M = load(meg_mat);
+    if isfield(M, 'logoddsratios')
+        logoddsratios = M.logoddsratios;
+    elseif isfield(M, 'logoddsratio')
+        logoddsratios = M.logoddsratio;
+    else
+        error('No logoddsratios/logoddsratio variable found in %s', meg_mat);
+    end
+    assert(isfield(M, 'subs'), 'No subs variable found in %s', meg_mat);
+    assert(isfield(M, 'timeWin'), 'No timeWin variable found in %s', meg_mat);
+
+    if isempty(stepIdx)
+        stepIdx = 1:size(logoddsratios, 4);
+    end
+    timeIdx = M.timeWin(:,1) >= timeWindow(1) & M.timeWin(:,2) <= timeWindow(2);
+    assert(any(timeIdx), 'No MEG time windows found within %.3f-%.3f s', timeWindow(1), timeWindow(2));
+
+    % Color index 1 is orange/y; color index 2 is purple/x.
+    megOrange = squeeze(mean(mean(logoddsratios(:,1,timeIdx,stepIdx), 3, 'omitnan'), 4, 'omitnan'));
+    megPurple = squeeze(mean(mean(logoddsratios(:,2,timeIdx,stepIdx), 3, 'omitnan'), 4, 'omitnan'));
+
+    humanIDs = string(humanIDs);
+    megIDs = string(M.subs(:));
+    xMEG = nan(size(humanIDs));
+    yMEG = nan(size(humanIDs));
+    [hasMEG, loc] = ismember(humanIDs, megIDs);
+    xMEG(hasMEG) = megPurple(loc(hasMEG));
+    yMEG(hasMEG) = megOrange(loc(hasMEG));
+    hasMEG = hasMEG & isfinite(xMEG) & isfinite(yMEG);
 end

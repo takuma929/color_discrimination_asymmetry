@@ -77,14 +77,10 @@ meg_time_window = [0.35 0.65];
 % Count all available MEG steps for the separate step-wise scatter plots.
 nMegSteps = megStepCount(meg_mat);
 
-% Print a participant-matched comparison of human and MEG distances. This is a
-% console report only; it does not affect the saved figures.
+% Print the participant-matched MEG-vs-psychophysics distance comparison across
+% shift magnitudes (Fig. S4 statistics). Console report only; does not affect
+% the saved figures.
 reportMegParticipantDistanceAcrossSteps(meg_mat, H_HSI.ptID, xHuman, yHuman, meg_time_window);
-
-% Stats for the Figure 6(a) claim: for the large shift, the MEG group mean moves
-% progressively toward the psychophysical mean over time, with the strongest
-% correspondence in the 350-650 ms windows. Console report only.
-reportMegTimeWindowCorrespondence(meg_mat, H_HSI.ptID, xHuman, yHuman, meg_time_window, 3);
 
 % Create the output directory only if saving is enabled.
 if doSave && ~exist(outdir, 'dir')
@@ -116,10 +112,12 @@ if doSave
     % fig6a: group-mean MEG time-course trajectory (large step).
     exportgraphics(figTimecourse, fullfile(outdir, 'fig6a_scatter_human_meg_timelapse_all_steps.pdf'), ...
         'ContentType', 'vector', 'BackgroundColor', 'none');
+    fprintf('%s successfully saved.\n', 'fig6a_scatter_human_meg_timelapse_all_steps.pdf');
 
     % fig6b: task-comparison experiment (mean symbols only).
     exportgraphics(figControlMeanOnly, fullfile(outdir, 'fig6b_control.pdf'), ...
         'ContentType', 'vector', 'BackgroundColor', 'none');
+    fprintf('%s successfully saved.\n', 'fig6b_control.pdf');
 end
 
 %% ------------------------------------------------------------------------
@@ -142,13 +140,8 @@ function [controlColorMEG, controlOrientationMEG] = loadDecodingAccuracyControlL
     expIdx.main = 2;
     expIdx.control = 3;
 
-    % Print the collaborator's odds formula when present. The implementation
-    % below uses the standard odds transform acc/(1-acc), then forms the
-    % hue/chroma odds ratio after time-window averaging.
-    if isfield(dec, 'oddsFormula')
-        formulaText = strjoin(string(dec.oddsFormula), ' ');
-        fprintf('Decoding accuracy odds formula from file: %s\n', formulaText);
-    end
+    % The odds ratio uses the standard transform acc/(1-acc), formed after
+    % time-window averaging.
 
     % Task-comparison controls use step 3 in two different experiments:
     % supplementary experiment = color task; control experiment = orientation.
@@ -543,168 +536,19 @@ function reportMegParticipantDistanceAcrossSteps(meg_mat, humanIDs, xHuman, yHum
     megX = xByStep(validMegAllSteps, :);
     megY = yByStep(validMegAllSteps, :);
 
-    % Compare MEG step means against the human psychophysics mean in the same
-    % two-dimensional log-ratio space.
-    psychMeanX = mean(psychX, 'omitnan');
-    psychMeanY = mean(psychY, 'omitnan');
-    meanMegX = mean(megX, 1, 'omitnan');
-    meanMegY = mean(megY, 1, 'omitnan');
-    observedDist = sqrt((meanMegX - psychMeanX).^2 + (meanMegY - psychMeanY).^2);
-
-    % Participant distances support paired tests between MEG steps.
+    % Participant-matched distance between each MEG step point and that
+    % participant's own psychophysical point, in log10 hue/chroma ratio space.
     participantDist = sqrt((megX - psychX).^2 + (megY - psychY).^2);
-    [~, closestStep] = min(observedDist);
 
-    fprintf('\n============================================================\n');
-    fprintf('MEG step comparison: participant-matched distance to psychophysics\n');
-    fprintf('Time window: %.3f-%.3f s\n', timeWindow(1), timeWindow(2));
-    fprintf('Psychophysics mean point (black circle): purple/x = %.4f, orange/y = %.4f, N = %d\n', ...
-        psychMeanX, psychMeanY, numel(psychX));
-    fprintf('Matched participants with valid psychophysics and all MEG steps: N = %d\n', size(megX, 1));
-    fprintf('Distance is Euclidean distance in log10 hue/chroma ratio space.\n');
-    fprintf('Mean-point distance is shown for reference; stats use participant-matched distances.\n');
-    fprintf('============================================================\n');
-
-    for iStep = 1:nSteps
-        fprintf('Step %d: mean MEG purple/x = %.4f, orange/y = %.4f, mean-point distance = %.4f, participant distance mean = %.4f, SD = %.4f\n', ...
-            iStep, meanMegX(iStep), meanMegY(iStep), observedDist(iStep), ...
-            mean(participantDist(:, iStep), 'omitnan'), std(participantDist(:, iStep), 0, 'omitnan'));
-    end
-    fprintf('Closest step by observed mean-point distance: Step %d\n', closestStep);
-
-    % Use local t-test helpers so the script does not require the Statistics and
-    % Machine Learning Toolbox just for this console report.
-    fprintf('\nPairwise paired tests on participant-matched distances (two-tailed)\n');
-    fprintf('Negative difference means the first step is closer.\n');
+    % Two-tailed paired t-tests comparing the participant-matched distances
+    % across MEG shift magnitudes (Fig. S4 statistics).
     for iStep = 1:nSteps
         for jStep = iStep+1:nSteps
             diffDist = participantDist(:, iStep) - participantDist(:, jStep);
             [p, ci, stats] = pairedTTestLocal(diffDist);
-            fprintf('Step %d - Step %d: mean diff = %.4f, 95%% CI [%.4f, %.4f], t(%d) = %.4f, two-tailed p = %.4g\n', ...
+            fprintf('MEG step %d vs step %d: mean diff = %.4f, 95%% CI [%.4f, %.4f], t(%d) = %.2f, p = %.4g\n', ...
                 iStep, jStep, mean(diffDist, 'omitnan'), ci(1), ci(2), stats.df, stats.tstat, p);
         end
-    end
-    fprintf('============================================================\n\n');
-end
-
-function reportMegTimeWindowCorrespondence(meg_mat, humanIDs, xHuman, yHuman, band, stepLevel)
-    % Stats for the Figure 6(a) claim, restricted to one MEG step (the large
-    % shift). For every MEG time window, compute the participant-matched distance
-    % between the MEG log-odds-ratio point and each participant's own
-    % psychophysical point, then test:
-    %   (1) whether the in-band windows (default 350-650 ms) are the closest, and
-    %   (2) whether the MEG point converges on psychophysics over time (a negative
-    %       per-participant slope of distance vs time from stimulus onset to the
-    %       band minimum).
-    %
-    % This is a console report only; it does not change any saved figure.
-
-    M = loadMegMat(meg_mat);
-    logoddsratios = M.logoddsratios;          % subject x color x time x step
-    timeWin = M.timeWin;
-    timeCenters = mean(timeWin, 2);
-    nWin = size(logoddsratios, 3);
-
-    % Align MEG subjects to the human participant order.
-    humanIDs = string(humanIDs);
-    megIDs = string(M.subs(:));
-    [hasMEG, loc] = ismember(humanIDs, megIDs);
-    valid = hasMEG & isfinite(xHuman(:)) & isfinite(yHuman(:));
-
-    % Participant-matched distance per window: rows = participants, cols = window.
-    dist = nan(numel(humanIDs), nWin);
-    for w = 1:nWin
-        megPurple = squeeze(logoddsratios(:, 2, w, stepLevel));   % color 2 = purple/x
-        megOrange = squeeze(logoddsratios(:, 1, w, stepLevel));   % color 1 = orange/y
-        mp = nan(numel(humanIDs), 1);
-        mo = nan(numel(humanIDs), 1);
-        mp(valid) = megPurple(loc(valid));
-        mo(valid) = megOrange(loc(valid));
-        dist(:, w) = sqrt((mp - xHuman(:)).^2 + (mo - yHuman(:)).^2);
-    end
-
-    % Keep participants with a finite distance in every window so all windows are
-    % compared on the same paired sample.
-    keep = valid & all(isfinite(dist), 2);
-    dist = dist(keep, :);
-    nPt = size(dist, 1);
-    meanDist = mean(dist, 1, 'omitnan');
-    semDist = std(dist, 0, 1, 'omitnan') ./ sqrt(nPt);
-
-    % In-band windows = MEG windows fully inside the requested band.
-    bandIdx = find(timeWin(:,1) >= band(1) - 1e-9 & timeWin(:,2) <= band(2) + 1e-9);
-    postIdx = find(timeCenters > 0.05);                  % post-stimulus windows
-    outBandPostIdx = setdiff(postIdx, bandIdx);          % later/earlier post-stim
-    outBandAllIdx = setdiff(1:nWin, bandIdx);            % every other window
-
-    fprintf('\n============================================================\n');
-    fprintf('Figure 6(a) stats: MEG-to-psychophysics correspondence over time\n');
-    fprintf('Large shift only (MEG step %d). Participant-matched, N = %d.\n', stepLevel, nPt);
-    fprintf('Distance = Euclidean distance in log10 hue/chroma ratio space.\n');
-    fprintf('Band = %d-%d ms windows: %s\n', round(1000*band(1)), round(1000*band(2)), mat2str(bandIdx(:)'));
-    fprintf('============================================================\n');
-    for w = 1:nWin
-        inBand = ismember(w, bandIdx);
-        marker = '';
-        if inBand, marker = '  <-- in band'; end
-        fprintf('win %2d  %4d-%4d ms  meanDist = %.4f +/- %.4f%s\n', ...
-            w, round(1000*timeWin(w,1)), round(1000*timeWin(w,2)), meanDist(w), semDist(w), marker);
-    end
-
-    % (1a) Is the global minimum inside the band, and are the band windows the
-    % three smallest distances?
-    [~, minWin] = min(meanDist);
-    [~, rankOrder] = sort(meanDist, 'ascend');
-    smallest3 = sort(rankOrder(1:numel(bandIdx)));
-    fprintf('\nGlobal minimum distance: win %d (%d-%d ms), meanDist = %.4f\n', ...
-        minWin, round(1000*timeWin(minWin,1)), round(1000*timeWin(minWin,2)), meanDist(minWin));
-    fprintf('Minimum is inside the band: %s\n', ternaryText(ismember(minWin, bandIdx)));
-    fprintf('The %d smallest-distance windows are: %s (band windows: %s) -> match: %s\n', ...
-        numel(bandIdx), mat2str(smallest3(:)'), mat2str(sort(bandIdx(:))'), ...
-        ternaryText(isequal(smallest3(:), sort(bandIdx(:)))));
-
-    % (1b) Paired test: in-band mean distance vs out-of-band mean distance.
-    inBandMean = mean(dist(:, bandIdx), 2, 'omitnan');
-    outPostMean = mean(dist(:, outBandPostIdx), 2, 'omitnan');
-    outAllMean = mean(dist(:, outBandAllIdx), 2, 'omitnan');
-
-    fprintf('\nPaired t-tests on participant-matched distances (two-tailed):\n');
-    fprintf('Negative difference means the band is CLOSER to psychophysics.\n');
-
-    diffPost = inBandMean - outPostMean;
-    [pPost, ciPost, sPost] = pairedTTestLocal(diffPost);
-    fprintf('Band vs other post-stimulus windows: mean diff = %.4f, 95%% CI [%.4f, %.4f], t(%d) = %.4f, p = %.4g\n', ...
-        mean(diffPost, 'omitnan'), ciPost(1), ciPost(2), sPost.df, sPost.tstat, pPost);
-
-    diffAll = inBandMean - outAllMean;
-    [pAll, ciAll, sAll] = pairedTTestLocal(diffAll);
-    fprintf('Band vs all other windows:           mean diff = %.4f, 95%% CI [%.4f, %.4f], t(%d) = %.4f, p = %.4g\n', ...
-        mean(diffAll, 'omitnan'), ciAll(1), ciAll(2), sAll.df, sAll.tstat, pAll);
-
-    % (2) Progressive convergence: per-participant slope of distance vs time from
-    % stimulus onset (first window with center >= 0) to the band's last window.
-    onsetWin = find(timeCenters >= -1e-9, 1, 'first');
-    riseIdx = onsetWin:max(bandIdx);
-    riseTimes = timeCenters(riseIdx);
-    slopes = nan(nPt, 1);
-    for iPt = 1:nPt
-        coef = polyfit(riseTimes(:), dist(iPt, riseIdx)', 1);
-        slopes(iPt) = coef(1);   % distance change per second
-    end
-    [pSlope, ciSlope, sSlope] = pairedTTestLocal(slopes);
-    fprintf(['\nConvergence over time (%d-%d ms): per-participant slope of distance vs time\n' ...
-             '  mean slope = %.4f per s, 95%% CI [%.4f, %.4f], t(%d) = %.4f, two-tailed p = %.4g\n'], ...
-        round(1000*timeCenters(riseIdx(1))), round(1000*timeCenters(riseIdx(end))), ...
-        mean(slopes, 'omitnan'), ciSlope(1), ciSlope(2), sSlope.df, sSlope.tstat, pSlope);
-    fprintf('Negative slope = MEG moves progressively toward psychophysics over time.\n');
-    fprintf('============================================================\n\n');
-end
-
-function txt = ternaryText(tf)
-    if tf
-        txt = 'yes';
-    else
-        txt = 'no';
     end
 end
 

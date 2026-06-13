@@ -67,8 +67,6 @@ fig = figure('Color', 'w');
 ax = axes(fig);
 hold(ax, 'on');
 
-localReportSamplingPercentages(fruitData, sampleCountPerFruit);
-
 for iFruit = 1:numel(fruitData)
     % Use only the chromatic DKL dimensions. The first DKL column is luminance,
     % which is not shown in this two-dimensional figure.
@@ -115,10 +113,13 @@ if doSave
     pause(0.1)
 
     % Save both vector and high-resolution raster versions of the scatter plot.
-    exportgraphics(fig, fullfile(outdir, 'fig1_objects_chromatic_distributions.pdf'), ...
+    figBaseName = 'fig1_objects_chromatic_distributions';
+    exportgraphics(fig, fullfile(outdir, [figBaseName '.pdf']), ...
         'ContentType', 'vector', 'BackgroundColor', 'none');
-    exportgraphics(fig, fullfile(outdir, 'fig1_objects_chromatic_distributions.png'), ...
+    exportgraphics(fig, fullfile(outdir, [figBaseName '.png']), ...
         'ContentType', 'image', 'BackgroundColor', 'none', 'Resolution', 600);
+    fprintf('%s successfully saved.\n', [figBaseName '.pdf']);
+    fprintf('%s successfully saved.\n', [figBaseName '.png']);
 
     % Save the object icons as individual PNG files for figure assembly.
     for iFruit = 1:numel(fruitData)
@@ -151,31 +152,6 @@ function RGB = localNormalizeRGB(RGB)
     RGB = RGB .^ (1/4);
 end
 
-function localReportSamplingPercentages(fruitData, sampleCountPerFruit)
-    % Print how much of each object is represented by the plotted sample count.
-    nObjects = numel(fruitData);
-    nPixels = nan(nObjects, 1);
-    samplePct = nan(nObjects, 1);
-
-    fprintf('\n=== Fig. 1 object sampling summary ===\n');
-    fprintf('Random sample count per object: %d pixels\n', sampleCountPerFruit);
-    fprintf('%-16s %12s %12s\n', 'Object', 'Total pixels', 'Sample %');
-
-    for iFruit = 1:nObjects
-        nPixels(iFruit) = size(fruitData(iFruit).DKL, 1);
-        samplePct(iFruit) = 100 * min(sampleCountPerFruit, nPixels(iFruit)) / nPixels(iFruit);
-        fprintf('%-16s %12d %11.2f%%\n', ...
-            char(string(fruitData(iFruit).name)), nPixels(iFruit), samplePct(iFruit));
-    end
-
-    meanPixels = mean(nPixels, 'omitnan');
-    meanSamplePct = mean(samplePct, 'omitnan');
-    pctOfMeanObject = 100 * sampleCountPerFruit / meanPixels;
-
-    fprintf('Average pixels per object: %.0f\n', meanPixels);
-    fprintf('%d pixels as %% of average object size: %.2f%%\n', sampleCountPerFruit, pctOfMeanObject);
-    fprintf('Average of per-object sample percentages: %.2f%%\n\n', meanSamplePct);
-end
 
 function [iconRGB, iconAlpha] = localPrepareIconForPng(icon)
     % Convert icon data to RGB and crop to the alpha/mask channel when present.

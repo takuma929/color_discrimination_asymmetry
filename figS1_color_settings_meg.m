@@ -78,8 +78,10 @@ if doSave
     pause(0.1)
     exportgraphics(figA, fullfile(outdir, 'figS1a_color_settings_meg_main.pdf'), ...
         'ContentType', 'vector', 'BackgroundColor', 'none');
+    fprintf('%s successfully saved.\n', 'figS1a_color_settings_meg_main.pdf');
     exportgraphics(figB, fullfile(outdir, 'figS1b_color_settings_meg_task_comparison.pdf'), ...
         'ContentType', 'vector', 'BackgroundColor', 'none');
+    fprintf('%s successfully saved.\n', 'figS1b_color_settings_meg_task_comparison.pdf');
 end
 
 %% ------------------------- LOCAL FUNCTIONS ------------------------------

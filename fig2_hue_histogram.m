@@ -59,6 +59,14 @@ end
 datasetMap = containers.Map;
 for f = 1:numel(csvFiles)
     fname = csvFiles(f).name;
+
+    % The sign-flipped ImageNet histogram is a network-training control (see
+    % Figure 7b), not one of the natural-image databases shown in Figure 2, so
+    % it is not drawn here.
+    if contains(fname, 'flips')
+        continue
+    end
+
     datasetName = erase(fname,'_hue_histogram.csv');
 
     % Normalize names by removing spaces. Some datasets have multiple files with
@@ -113,26 +121,15 @@ for g = 1:numel(datasetKeys)
     % Normalize by peak count so each radial plot uses the same unit radius.
     counts = counts_total ./ max(counts_total);
 
-    % ---- Flip S-axis and compute quadrant proportions ----
-    centers = mod(-((edges_lo + edges_hi)/2), 360); % flip S-axis
-
-    % quadrant masks
-    [orangeMask, purpleMask] = localQuadrantMasks(centers, fileList);
-
-    orangeProp = sum(counts(orangeMask)) / sum(counts);
-    purpleProp = sum(counts(purpleMask)) / sum(counts);
-
-    fprintf('%s: Orange(270–360) = %.3f, Purple(0–90) = %.3f\n',...
-        baseName, orangeProp, purpleProp);
-
     fig = localDrawHueHistogramFigure(counts, edges_lo, edges_hi, rgb, ...
         rgbCirc, thetaCirc, twocolumn, 0:45:315);
 
     % ---- save ----
-    exportgraphics(fig, fullfile(outDir, ['fig2_' baseName '_histogram.png']), ...
+    histName = ['fig2_' baseName '_histogram.png'];
+    exportgraphics(fig, fullfile(outDir, histName), ...
         'ContentType','image','BackgroundColor','none','Resolution',600);
     close(fig);
-    %close all
+    fprintf('%s successfully saved.\n', histName);
 end
 
 %% ------------------------- DRAW AGGREGATE HISTOGRAMS --------------------
@@ -149,11 +146,11 @@ figExtract = localDrawHueCircleQuadrantsFigure(rgbCirc, thetaCirc, twocolumn);
 exportgraphics(figExtract, fullfile(outDir, 'fig2_hue_circle_quadrants_extract.png'), ...
     'ContentType','image','BackgroundColor','none','Resolution',600);
 close(figExtract);
+fprintf('%s successfully saved.\n', 'fig2_hue_circle_quadrants_extract.png');
 
 %% ---------------- Collect proportions across datasets ----------------
 orangeProps = [];
 purpleProps = [];
-datasetNames = {};
 
 for g = 1:numel(datasetKeys)
     baseName = datasetKeys{g};
@@ -186,18 +183,12 @@ for g = 1:numel(datasetKeys)
 
     orangeProp = sum(counts(orangeMask)) / sum(counts);
     purpleProp = sum(counts(purpleMask)) / sum(counts);
-    if ~contains(fileList{1},'flips')
-        orangeProps(end+1) = orangeProp;
-        purpleProps(end+1) = purpleProp;
-        datasetNames{end+1} = baseName;
-    end
-    fprintf('%s: Orange = %.3f, Purple = %.3f\n', baseName, orangeProp, purpleProp);
+    orangeProps(end+1) = orangeProp;
+    purpleProps(end+1) = purpleProp;
 end
 
 %% ---------------- Statistical comparison ----------------
-% Paired comparison across datasets, excluding files tagged as flips above.
-% MATLAB's default paired ttest is two-tailed.
-testTail = 'two-tailed';
+% Paired comparison across datasets. MATLAB's default paired ttest is two-tailed.
 [~,p,~,stats] = ttest(orangeProps, purpleProps);
 
 diffVals = orangeProps - purpleProps;
@@ -207,29 +198,10 @@ meanDiff = mean(diffVals);
 sdDiff   = std(diffVals,1); % population SD
 cohens_d = meanDiff / sdDiff;
 
-fprintf('\n=== Statistical Comparison: Orange vs Purple quadrants ===\n');
-fprintf('Test tail = %s paired t-test (MATLAB default)\n', testTail);
-fprintf('Mean orange quadrant fraction across datasets = %.1f%%\n', meanOrangePct);
-fprintf('Mean purple quadrant fraction across datasets = %.1f%%\n', meanPurplePct);
-fprintf('Paired t-test (%s): t(%d) = %.3f, p = %.3g\n', testTail, stats.df, stats.tstat, p);
-fprintf('Mean difference (Orange - Purple) = %.1f percentage points\n', meanDiff * 100);
-fprintf('Std. deviation of differences = %.3f\n', sdDiff);
-fprintf('Cohen''s d = %.3f (effect size)\n', cohens_d);
-fprintf(['Manuscript text: Formally, treating each dataset as one observation, ' ...
-    'the mean fraction of samples in the orange quadrant across datasets was %.1f%%, ' ...
-    'whereas the purple quadrant accounted for only %.1f%%; this difference was ' ...
-    'statistically significant (paired t-test across datasets: t(%d)=%.1f, ' ...
-    'p=%.3g; Cohen''s d=%.2f).\n'], ...
-    meanOrangePct, meanPurplePct, stats.df, stats.tstat, p, cohens_d);
-
-% ---------------- Optional: Table output ----------------
-Tstats = table(datasetNames', orangeProps', purpleProps', diffVals', ...
-    'VariableNames', {'Dataset','OrangeProp','PurpleProp','Difference'});
-disp(Tstats);
-
-%% ---------------- Image counts across databases ----------------
-localPrintImageCounts(datasetMap, csvFiles, rgbAggregateFiles, ...
-    hyperAggregateFiles, dataDir);
+fprintf('Orange vs purple quadrant fraction across %d datasets: orange = %.1f%%, purple = %.1f%%\n', ...
+    numel(orangeProps), meanOrangePct, meanPurplePct);
+fprintf('Two-tailed paired t-test: t(%d) = %.1f, p = %.3g, Cohen''s d = %.2f\n', ...
+    stats.df, stats.tstat, p, cohens_d);
 
 function localWriteTinyTaskonomyHueHistogram(dataDir)
     % Convert per-scene Tiny Taskonomy .mat count files into the same hue
@@ -259,7 +231,9 @@ function localWriteTinyTaskonomyHueHistogram(dataDir)
             error('Hue bin edges do not match in %s', matFiles(iFile).name);
         end
 
-        countsThis = squeeze(sum(sum(S.Out.counted.all, 2), 3));
+        % counted.all is hue x image (chroma already summed out); sum over
+        % images to get the per-hue pixel count for this scene.
+        countsThis = sum(S.Out.counted.all, 2);
         countsTotal = countsTotal + countsThis(:);
     end
 
@@ -277,105 +251,6 @@ function localWriteTinyTaskonomyHueHistogram(dataDir)
         'VariableNames', {'hue_bin','hue_center_deg','hue_edge_lo_deg', ...
         'hue_edge_hi_deg','count'});
     writetable(Ttiny, fullfile(dataDir, 'tiny_taskonomy_hue_histogram.csv'));
-end
-
-function localPrintImageCounts(datasetMap, ~, rgbAggregateFiles, hyperAggregateFiles, dataDir)
-    datasetKeys = keys(datasetMap);
-    datasetNames = {};
-    nImages = [];
-
-    for iKey = 1:numel(datasetKeys)
-        datasetName = datasetKeys{iKey};
-        fileList = datasetMap(datasetName);
-        datasetNames{end+1} = datasetName; %#ok<AGROW>
-        nImages(end+1) = localCountImagesForFileList(fileList, dataDir); %#ok<AGROW>
-    end
-
-    datasetNames{end+1} = 'all_rgb'; %#ok<AGROW>
-    nImages(end+1) = localCountImagesForFileList(rgbAggregateFiles, dataDir); %#ok<AGROW>
-
-    datasetNames{end+1} = 'all_hyperspectral'; %#ok<AGROW>
-    nImages(end+1) = localCountImagesForFileList(hyperAggregateFiles, dataDir); %#ok<AGROW>
-
-    fprintf('\n=== Number of images across databases ===\n');
-    fprintf('%-22s %14s\n', 'Dataset', 'NImages');
-    fprintf('%-22s %14s\n', repmat('-', 1, 22), repmat('-', 1, 14));
-    for iDataset = 1:numel(datasetNames)
-        if isnan(nImages(iDataset))
-            countText = 'unavailable';
-        else
-            countText = sprintf('%.0f', nImages(iDataset));
-        end
-        fprintf('%-22s %14s\n', datasetNames{iDataset}, countText);
-    end
-
-    missingNames = datasetNames(isnan(nImages));
-    if ~isempty(missingNames)
-        fprintf('Image counts unavailable for: %s\n', strjoin(missingNames, ', '));
-    end
-end
-
-function nImages = localCountImagesForFileList(fileList, dataDir)
-    nImages = 0;
-    hasValidCount = false;
-
-    for iFile = 1:numel(fileList)
-        countThis = localCountImagesForHueHistogramFile(fileList{iFile}, dataDir);
-        if isnan(countThis)
-            nImages = NaN;
-            return
-        end
-
-        nImages = nImages + countThis;
-        hasValidCount = true;
-    end
-
-    if ~hasValidCount
-        nImages = NaN;
-    end
-end
-
-function nImages = localCountImagesForHueHistogramFile(hueFileName, dataDir)
-    datasetName = erase(hueFileName, '_hue_histogram.csv');
-
-    if strcmp(datasetName, 'tiny_taskonomy')
-        nImages = localCountTinyTaskonomyImages(dataDir);
-        return
-    end
-
-    summaryFile = fullfile(dataDir, [datasetName '_summary.csv']);
-    if ~exist(summaryFile, 'file')
-        nImages = NaN;
-        return
-    end
-
-    Tsummary = readtable(summaryFile);
-    if ~ismember('n_images', Tsummary.Properties.VariableNames)
-        nImages = NaN;
-        return
-    end
-
-    nImages = sum(Tsummary.n_images);
-end
-
-function nImages = localCountTinyTaskonomyImages(dataDir)
-    summaryFile = fullfile(dataDir, 'tiny_taskonomy_dkl_histcount', ...
-        'tiny_taskonomy_count_summary.csv');
-    if exist(summaryFile, 'file')
-        Tsummary = readtable(summaryFile);
-        if ismember('n_images', Tsummary.Properties.VariableNames)
-            nImages = sum(Tsummary.n_images);
-            return
-        end
-    end
-
-    matFiles = dir(fullfile(dataDir, 'tiny_taskonomy_dkl_histcount', ...
-        'tiny_taskonomy_*_count.mat'));
-    nImages = 0;
-    for iFile = 1:numel(matFiles)
-        S = load(fullfile(matFiles(iFile).folder, matFiles(iFile).name), 'Out');
-        nImages = nImages + numel(S.Out.image_files);
-    end
 end
 
 function [orangeMask, purpleMask] = localQuadrantMasks(centers, fileList)
@@ -431,19 +306,14 @@ function localDrawAggregateHueHistogram(baseName, fileList, dataDir, outDir, rgb
     end
 
     counts = counts_total ./ max(counts_total);
-    centers = mod(-((edges_lo + edges_hi) / 2), 360);
-    [orangeMask, purpleMask] = localQuadrantMasks(centers, fileList);
-    orangeProp = sum(counts(orangeMask)) / sum(counts);
-    purpleProp = sum(counts(purpleMask)) / sum(counts);
-
-    fprintf('%s aggregate: Orange = %.3f, Purple = %.3f, files = %d\n', ...
-        baseName, orangeProp, purpleProp, numel(fileList));
 
     fig = localDrawHueHistogramFigure(counts, edges_lo, edges_hi, rgb, ...
         rgbCirc, thetaCirc, twocolumn, 0:45:315);
-    exportgraphics(fig, fullfile(outDir, ['fig2_' baseName '_histogram.png']), ...
+    histName = ['fig2_' baseName '_histogram.png'];
+    exportgraphics(fig, fullfile(outDir, histName), ...
         'ContentType', 'image', 'BackgroundColor', 'none', 'Resolution', 600);
     close(fig);
+    fprintf('%s successfully saved.\n', histName);
 end
 
 function fig = localDrawHueHistogramFigure(counts, edges_lo, edges_hi, rgb, rgbCirc, thetaCirc, twocolumn, radialAngles)

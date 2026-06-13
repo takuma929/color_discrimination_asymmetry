@@ -49,7 +49,7 @@ allOrange = [];
 % every available depth.
 for k = 1:numel(allNetworks)
     network = allNetworks{k};
-    network_csv = fullfile(scriptDir, 'data', 'network', network, [network, '_thresholds_stats.csv']);
+    network_csv = fullfile(scriptDir, 'data', 'network', [network, '_thresholds.csv']);
     assert(isfile(network_csv), 'Network CSV not found: %s', network_csv);
 
     N = readtable(network_csv, 'TextType', 'string');
@@ -62,7 +62,8 @@ for k = 1:numel(allNetworks)
     end
     N.depth = lower(string(N.depth));
     N.refLabel = lower(string(N.quadrant));
-    N.dir = lower(string(N.direction));
+    N.axis = lower(string(N.hue_chroma));
+    N.sign = lower(string(N.direction));
 
     depths = localOrderedDepths(unique(N.depth, 'stable'));
     purpleVals = nan(numel(depths), 1);
@@ -101,7 +102,7 @@ localExportIndividualPanels(layerData, outdir, twocolumn, allPurple, allOrange, 
 
 function depths = localOrderedDepths(depths)
     % Put network depths in anatomical/architectural order when present.
-    depthOrder = ["stem","layer1","layer2","layer3","layer4","fc"];
+    depthOrder = ["layer_1","block_1","block_2","block_3","block_4","final_layer"];
     depths = string(depths(:));
     ordered = strings(0,1);
     for i = 1:numel(depthOrder)
@@ -120,16 +121,16 @@ function Sdepth = localNetworkThresholdStruct(Nrows)
     for i = 1:numel(refs)
         r = refs(i);
         R = Nrows(Nrows.refLabel == r, :);
-        Sdepth.(r).chroma.pos = localGetDirStats(R, "chroma_plus");
-        Sdepth.(r).chroma.neg = localGetDirStats(R, "chroma_minus");
-        Sdepth.(r).hue.pos    = localGetDirStats(R, "hue_plus");
-        Sdepth.(r).hue.neg    = localGetDirStats(R, "hue_minus");
+        Sdepth.(r).chroma.pos = localGetDirStats(R, "chroma", "pos");
+        Sdepth.(r).chroma.neg = localGetDirStats(R, "chroma", "neg");
+        Sdepth.(r).hue.pos    = localGetDirStats(R, "hue", "pos");
+        Sdepth.(r).hue.neg    = localGetDirStats(R, "hue", "neg");
     end
 end
 
-function st = localGetDirStats(T, dirName)
-    % Extract mean threshold and recover SD from SE for one named DKL direction.
-    idx = lower(string(T.dir)) == dirName;
+function st = localGetDirStats(T, axisName, signName)
+    % Extract mean threshold and recover SD from SE for one hue/chroma axis and sign.
+    idx = T.axis == axisName & T.sign == signName;
     st.mean = mean(T.threshold_mean(idx), 'omitnan');
     se = mean(T.threshold_se(idx), 'omitnan');
     n = mean(T.n_measured(idx), 'omitnan');
@@ -219,6 +220,7 @@ function localExportIndividualPanels(layerData, outdir, twocolumn, allPurple, al
             pause(0.5)
             exportgraphics(fig, fullfile(outdir, outname), ...
                 'ContentType', 'vector', 'BackgroundColor', 'none');
+            fprintf('%s successfully saved.\n', outname);
         end
         close(fig)
     end
@@ -227,7 +229,7 @@ end
 function localPlotLayerLines(ax, layerData, networks, allPurple, allOrange, humanStats, networkMarkerArea, refName, familyTitle)
     % Plot one layer-wise family panel for a single reference color. For the COCO
     % panel the two tasks are distinguished by solid/dashed line style.
-    depthOrder = ["stem","layer1","layer2","layer3","layer4","fc"];
+    depthOrder = ["layer_1","block_1","block_2","block_3","block_4","final_layer"];
     depthLabels = {'L_1','B_1','B_2','B_3','B_4','L_f'};
     [networkLow, networkHigh] = localAllNetworkErrorLimits(layerData);
     yMin = floor(100 * min([allPurple; allOrange; networkLow], [], 'omitnan')) / 100 - 0.02;
@@ -429,11 +431,8 @@ function localPrintOrangeLayerStats(layerData, allNetworks)
     sceneNetworks = validNetworks(contains(validNetworks, 'places365'));
     otherNetworks = setdiff(validNetworks, sceneNetworks, 'stable');
 
-    fprintf('\n=== Orange Hue/Chroma Ratio: Layer-Bin Comparison Across Networks ===\n');
-    fprintf('Excluded networks: %s\n', strjoin(excludeNetworks, ', '));
-
     localPrintOneGroupOrangeLayerStats(layerData, sceneNetworks, 'Places365-trained networks');
-    localPrintOneGroupOrangeLayerStats(layerData, otherNetworks, 'Other networks');
+    localPrintOneGroupOrangeLayerStats(layerData, otherNetworks, 'Object-level networks');
 end
 
 function localPrintOneGroupOrangeLayerStats(layerData, validNetworks, groupLabel)
@@ -450,7 +449,7 @@ function localPrintOneGroupOrangeLayerStats(layerData, validNetworks, groupLabel
             continue
         end
 
-        earlyMask = ismember(depths, ["stem","layer1","layer2","layer3"]);
+        earlyMask = ismember(depths, ["layer_1","block_1","block_2","block_3"]);
         lateMask = ~earlyMask;
         if any(earlyMask) && any(lateMask)
             twoBinRows(end+1,:) = {network, ...
@@ -459,23 +458,14 @@ function localPrintOneGroupOrangeLayerStats(layerData, validNetworks, groupLabel
         end
     end
 
-    fprintf('\n=== %s: orange ratio, layer-bin comparison ===\n', groupLabel);
-    fprintf('Networks included: %s\n', strjoin(validNetworks, ', '));
-
     if isempty(twoBinRows)
-        fprintf('No network data available for this group.\n');
         return
     end
 
-    fprintf('\n-- Two bins: layer 0 + blocks 1-3 vs others --\n');
     earlyVals = cell2mat(twoBinRows(:,2));
     lateVals = cell2mat(twoBinRows(:,3));
-    for i = 1:size(twoBinRows,1)
-        fprintf('%s: layer0_blocks1to3 = %.4f, others = %.4f, diff = %.4f\n', ...
-            twoBinRows{i,1}, twoBinRows{i,2}, twoBinRows{i,3}, twoBinRows{i,2} - twoBinRows{i,3});
-    end
-
-    localPrintPairedStats(earlyVals, lateVals, 'Layer0_Blocks1to3', 'Others');
+    fprintf('\n%s (orange ratio, layer 1 + blocks 1-3 vs deeper layers):\n', groupLabel);
+    localPrintPairedStats(earlyVals, lateVals, 'Layer 1 + blocks 1-3', 'Deeper layers');
 end
 
 function localPrintPairedStats(aVals, bVals, labelA, labelB)

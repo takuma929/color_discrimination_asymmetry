@@ -100,17 +100,17 @@ figTaskComp = plotTaskComparisonFigure(xHuman, yHuman, controlColorMEG, controlO
 if doSave
     pause(0.1)
     for iStep = 1:3
-        exportgraphics(figScatterByStep{iStep}, ...
-            fullfile(outdir, sprintf('figS4%s_log_odds_ratio_meg_individual_%s.pdf', ...
-                stepPanelLetters{iStep}, stepFileTags{iStep})), ...
+        stepName = sprintf('figS4%s_log_odds_ratio_meg_individual_%s.pdf', ...
+            stepPanelLetters{iStep}, stepFileTags{iStep});
+        exportgraphics(figScatterByStep{iStep}, fullfile(outdir, stepName), ...
             'ContentType', 'vector', 'BackgroundColor', 'none');
+        fprintf('%s successfully saved.\n', stepName);
     end
 
     exportgraphics(figTaskComp, ...
         fullfile(outdir, 'figS4d_log_odds_ratio_meg_individual_taskcomp.pdf'), ...
         'ContentType', 'vector', 'BackgroundColor', 'none');
-
-    fprintf('Saved figS4 individual log-odds-ratio panels to %s\n', outdir);
+    fprintf('%s successfully saved.\n', 'figS4d_log_odds_ratio_meg_individual_taskcomp.pdf');
 end
 
 %% ========================= LOCAL FUNCTIONS ==============================
@@ -205,10 +205,6 @@ function [controlColorMEG, controlOrientationMEG] = loadDecodingAccuracyControlL
     expIdx.main = 2;
     expIdx.control = 3;
 
-    if isfield(dec, 'oddsFormula')
-        formulaText = strjoin(string(dec.oddsFormula), ' ');
-        fprintf('Decoding accuracy odds formula from file: %s\n', formulaText);
-    end
 
     % Task-comparison controls use step 3: supplementary = color task;
     % control = orientation task.

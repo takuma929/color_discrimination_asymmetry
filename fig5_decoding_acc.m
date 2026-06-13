@@ -98,8 +98,6 @@ if doSave
     localSavePanel(panelFig, outdir, 'fig5e_decoding_acc');
 end
 
-fprintf('Saved Figure 5 outputs to %s\n', outdir);
-
 %% ------------------------- EXTRACTION -----------------------------------
 
 function subjByTime = localConditionAccuracy(acc, accDims, dimLevs, timeDim, refDim, axisDim, stepDim, ptDim, refName, axisName, stepLevel)
@@ -304,6 +302,8 @@ function localSavePanel(fig, outdir, fileStem)
         'ContentType', 'vector', 'BackgroundColor', 'white');
     exportgraphics(fig, fullfile(outdir, [fileStem '.png']), ...
         'Resolution', 300, 'BackgroundColor', 'white');
+    fprintf('%s successfully saved.\n', [fileStem '.pdf']);
+    fprintf('%s successfully saved.\n', [fileStem '.png']);
 end
 
 function localStyleTimeAxis(ax)

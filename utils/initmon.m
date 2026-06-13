@@ -10,7 +10,6 @@ if isempty(monxyY)
   monxyY = [0.6400 0.3300 0.2126;
             0.3000 0.6000 0.7152;
             0.1500 0.0600 0.0722];
-display('STANDARD MONCIE USED')
 end
 
 x = monxyY(:,1); y = monxyY(:,2); Y = monxyY(:,3);

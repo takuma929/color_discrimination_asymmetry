@@ -260,9 +260,10 @@ function localSaveCorrelationPanels(datasets, conditions, xField, xLabelText, yL
     for iCond = 1:numel(conditions)
         fig = localPlotCorrelationPanel(datasets, conditions(iCond), ...
             xField, xLabelText, yLabelText, xIsPerformance);
-        exportgraphics(fig, fullfile(outdir, sprintf('%s%s_%s_%s.pdf', ...
-            figPrefix, panelLetter, fileStem, conditions(iCond).tag)), ...
+        panelName = sprintf('%s%s_%s_%s.pdf', figPrefix, panelLetter, fileStem, conditions(iCond).tag);
+        exportgraphics(fig, fullfile(outdir, panelName), ...
             'ContentType', 'vector', 'BackgroundColor', 'none');
+        fprintf('%s successfully saved.\n', panelName);
     end
 end
 
@@ -278,23 +279,27 @@ function localSaveAggregateVsDecodingAccuracyFigure(datasets, outdir, figPrefix)
 
     fig = localPlotAggregateFigure(colorDatasets, 'propCorrect', true, ...
         'Fitted proportion correct', 'Decoding accuracy', 'Color tasks');
-    exportgraphics(fig, fullfile(outdir, sprintf('%s_a_prop_correct_vs_decoding_acc_color_tasks.pdf', figPrefix)), ...
-        'ContentType', 'vector', 'BackgroundColor', 'none');
+    nameA = sprintf('%s_a_prop_correct_vs_decoding_acc_color_tasks.pdf', figPrefix);
+    exportgraphics(fig, fullfile(outdir, nameA), 'ContentType', 'vector', 'BackgroundColor', 'none');
+    fprintf('%s successfully saved.\n', nameA);
 
     fig = localPlotAggregateFigure(orientationDataset, 'propCorrect', true, ...
         'Fitted proportion correct', 'Decoding accuracy', 'Orientation task');
-    exportgraphics(fig, fullfile(outdir, sprintf('%s_b_prop_correct_vs_decoding_acc_orientation_task.pdf', figPrefix)), ...
-        'ContentType', 'vector', 'BackgroundColor', 'none');
+    nameB = sprintf('%s_b_prop_correct_vs_decoding_acc_orientation_task.pdf', figPrefix);
+    exportgraphics(fig, fullfile(outdir, nameB), 'ContentType', 'vector', 'BackgroundColor', 'none');
+    fprintf('%s successfully saved.\n', nameB);
 
     fig = localPlotAggregateFigure(colorDatasets, 'distDKL', false, ...
         'Distance from reference color', 'Decoding accuracy', 'Color tasks');
-    exportgraphics(fig, fullfile(outdir, sprintf('%s_c_dkl_distance_vs_decoding_acc_color_tasks.pdf', figPrefix)), ...
-        'ContentType', 'vector', 'BackgroundColor', 'none');
+    nameC = sprintf('%s_c_dkl_distance_vs_decoding_acc_color_tasks.pdf', figPrefix);
+    exportgraphics(fig, fullfile(outdir, nameC), 'ContentType', 'vector', 'BackgroundColor', 'none');
+    fprintf('%s successfully saved.\n', nameC);
 
     fig = localPlotAggregateFigure(orientationDataset, 'distDKL', false, ...
         'Distance from reference color', 'Decoding accuracy', 'Orientation task');
-    exportgraphics(fig, fullfile(outdir, sprintf('%s_d_dkl_distance_vs_decoding_acc_orientation_task.pdf', figPrefix)), ...
-        'ContentType', 'vector', 'BackgroundColor', 'none');
+    nameD = sprintf('%s_d_dkl_distance_vs_decoding_acc_orientation_task.pdf', figPrefix);
+    exportgraphics(fig, fullfile(outdir, nameD), 'ContentType', 'vector', 'BackgroundColor', 'none');
+    fprintf('%s successfully saved.\n', nameD);
 end
 
 function fig = localPlotAggregateFigure(datasets, xField, xIsPerformance, xLabelText, yLabelText, panelTitle)
@@ -365,8 +370,6 @@ function localAnnotateAggregateCorrelation(ax, x, y, thisColor, panelTitle, xFie
         label = sprintf('r = %.2f%s', localRoundForDisplay(r, 2), localStars(p));
     end
 
-    fprintf('Plot correlation (%s, %s): %s, raw r = %.6f, p = %.6g, n = %d\n', ...
-        panelTitle, xField, label, r, p, numel(x));
 
     text(ax, 0.03, 0.96, label, ...
         'Units', 'normalized', ...
@@ -455,8 +458,6 @@ function localAnnotateCorrelation(ax, x, y, thisColor, rowIdx, condition, xField
         label = sprintf('r = %.2f%s', localRoundForDisplay(r, 2), localStars(p));
     end
 
-    fprintf('Plot correlation (%s, %s): %s, raw r = %.6f, p = %.6g, n = %d\n', ...
-        condition.label, xField, label, r, p, numel(x));
 
     xPos = 0.78;
     yPos = 0.025 + (rowIdx - 1) * 0.10;
@@ -526,14 +527,9 @@ function val = localRoundForDisplay(val, nDecimal)
 end
 
 function localPrintSummary(datasets, compareMode, runBootstrapStats)
-    % Display pooled correlations and bootstrap comparison statistics.
+    % Display pooled two-tailed Pearson correlations (and the subject-level
+    % bootstrap comparison when runBootstrapStats is true).
     fprintf('\n%s\n', compareMode);
-    fprintf('Pearson correlations are two-tailed.\n');
-    if runBootstrapStats
-        fprintf('Bootstrap p-values are two-sided.\n');
-    else
-        fprintf('Subject-level bootstrap comparison skipped. Set runBootstrapStats = true to run it.\n');
-    end
     for iData = 1:numel(datasets)
         T = datasets(iData).data;
         [rPerf, pPerf] = corr(T.propCorrect, T.decodingAcc, 'Rows', 'complete', 'Type', 'Pearson');

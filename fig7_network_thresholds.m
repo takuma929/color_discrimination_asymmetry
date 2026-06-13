@@ -100,7 +100,7 @@ polyHuman.orange = diamondPoly(refDKL.orange, ...
 % depth. Network CSV files contain mean thresholds and optional threshold SE.
 for k = 1:numel(allNetworks)
     network = allNetworks{k};
-    network_csv = fullfile(scriptDir, 'data', 'network', network, [network, '_thresholds_stats.csv']);
+    network_csv = fullfile(scriptDir, 'data', 'network', [network, '_thresholds.csv']);
 
     assert(isfile(network_csv), 'Network CSV not found: %s', network_csv);
     N = readtable(network_csv, 'TextType', 'string');
@@ -112,7 +112,8 @@ for k = 1:numel(allNetworks)
 
     N.depth = lower(string(N.depth));
     N.refLabel = lower(string(N.quadrant));
-    N.dir = lower(string(N.direction));
+    N.axis = lower(string(N.hue_chroma));
+    N.sign = lower(string(N.direction));
 
     depths = orderedDepths(unique(N.depth, 'stable'));
 
@@ -147,6 +148,7 @@ for k = 1:numel(allNetworks)
                 fig7NetworkPrefix(network), network, fig7DepthLabel(dname));
             exportgraphics(fig, fullfile(outdir, outname), ...
                 'ContentType', 'vector', 'BackgroundColor', 'none');
+            fprintf('%s successfully saved.\n', outname);
         end
         close(fig)
     end
@@ -156,7 +158,7 @@ end
 
 function depths = orderedDepths(depths)
     % Preserve a meaningful architectural ordering when those depth names exist.
-    depthOrder = ["stem","layer1","layer2","layer3","layer4","fc"];
+    depthOrder = ["layer_1","block_1","block_2","block_3","block_4","final_layer"];
     depths = string(depths(:));
     ordered = strings(0, 1);
     for i = 1:numel(depthOrder)
@@ -181,23 +183,9 @@ function prefix = fig7NetworkPrefix(network)
 end
 
 function label = fig7DepthLabel(depthName)
-    % Convert internal depth names to manuscript layer labels for filenames.
-    switch char(string(depthName))
-        case 'stem'
-            label = 'layer0';
-        case 'layer1'
-            label = 'block1';
-        case 'layer2'
-            label = 'block2';
-        case 'layer3'
-            label = 'block3';
-        case 'layer4'
-            label = 'block4';
-        case 'fc'
-            label = 'fc';
-        otherwise
-            label = char(string(depthName));
-    end
+    % Depth values already use the manuscript layer names (layer_1, block_1-4,
+    % final_layer); use them directly in output filenames.
+    label = char(string(depthName));
 end
 
 function fig = plotThresholdDiamondPanel(refDKL, polyHuman, polyNet, ...
@@ -307,16 +295,16 @@ function Sdepth = networkThresholdStruct(Nrows)
     for i = 1:numel(refs)
         r = refs(i);
         R = Nrows(Nrows.refLabel == r, :);
-        Sdepth.(r).chroma.pos = getDirStats(R, "chroma_plus");
-        Sdepth.(r).chroma.neg = getDirStats(R, "chroma_minus");
-        Sdepth.(r).hue.pos = getDirStats(R, "hue_plus");
-        Sdepth.(r).hue.neg = getDirStats(R, "hue_minus");
+        Sdepth.(r).chroma.pos = getDirStats(R, "chroma", "pos");
+        Sdepth.(r).chroma.neg = getDirStats(R, "chroma", "neg");
+        Sdepth.(r).hue.pos = getDirStats(R, "hue", "pos");
+        Sdepth.(r).hue.neg = getDirStats(R, "hue", "neg");
     end
 end
 
-function st = getDirStats(T, dirName)
-    % Network files store direction-specific means and, when available, SE.
-    idx = lower(string(T.dir)) == dirName;
+function st = getDirStats(T, axisName, signName)
+    % Network files store one threshold per hue/chroma axis and pos/neg sign.
+    idx = T.axis == axisName & T.sign == signName;
     st.mean = mean(T.threshold_mean(idx), 'omitnan');
     if ismember('threshold_se', T.Properties.VariableNames)
         st.se = mean(T.threshold_se(idx), 'omitnan');

@@ -63,8 +63,6 @@ for iCond = 1:numel(conditions)
     localPlotDecodingPanel(panelAx, timeMs, D, thisCond, chancePercent, plotTimeMs);
     localSavePanel(panelFig, outdir, sprintf('%s%c_%s', figPrefix, char('a' + iCond - 1), fileTag));
 end
-
-fprintf('Saved %s decoding accuracy panels to %s\n', figPrefix, outdir);
 end
 
 function subjByTime = localConditionAccuracy(acc, accDims, dimLevs, timeDim, refDim, axisDim, stepDim, ptDim, refName, axisName, stepLevel)
@@ -220,6 +218,8 @@ function localSavePanel(fig, outdir, fileStem)
         'ContentType', 'vector', 'BackgroundColor', 'white');
     exportgraphics(fig, fullfile(outdir, [fileStem '.png']), ...
         'Resolution', 300, 'BackgroundColor', 'white');
+    fprintf('%s successfully saved.\n', [fileStem '.pdf']);
+    fprintf('%s successfully saved.\n', [fileStem '.png']);
 end
 
 function localStyleTimeAxis(ax)

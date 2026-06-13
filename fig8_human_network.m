@@ -2,13 +2,8 @@
 % Plot human psychophysics, MEG, neural-network models, and task-comparison
 % MEG controls in one hue/chroma ratio summary figure.
 %
-% Two figures are produced:
-%   fig8_human_network         - one point per network, averaged across all
-%                                layers/depths (with SE bars).
-%   fig8_human_network_aligned - one point per network at the single layer/depth
-%                                whose (purple, orange) point is closest to the
-%                                human psychophysical mean (most human-aligned
-%                                layer).
+% One figure is produced (fig8_human_network): one point per network, averaged
+% across all layers/depths (with SE bars).
 %
 % Coordinates are computed as:
 %   sensitivity = 1 / threshold
@@ -83,12 +78,9 @@ T.sign = lower(string(T.direction));
 
 % One point per neural network, averaged across model layers/depths.
 HSI_all = struct;
-HSI_depth_all = struct;
 for k = 1:numel(allNetworks)
     network = allNetworks{k};
     HSI_all.(network) = networkSensitivityHSI(network, scriptDir);
-    % Per-layer/depth coordinates, used to pick the most human-aligned layer.
-    HSI_depth_all.(network) = networkDepthHSI(network, scriptDir);
 end
 
 % Task-comparison controls from raw decoding accuracies. As in fig5d:
@@ -105,26 +97,16 @@ end
 % labelTasks: when true, write each point's task name next to its marker.
 plotOptions = struct('wideLayout', false, 'labelTasks', false);
 
-% Human psychophysical mean, used as the alignment target for the second figure.
-humanMean = [mean(xHuman, 'omitnan'), mean(yHuman, 'omitnan')];
-
-% Main figure: one network point averaged across all layers/depths.
+% One network point averaged across all layers/depths.
 fig = plotFig8Summary(xHuman, yHuman, xMEG, yMEG, hasMEG, ...
     HSI_all, allNetworks, controlColorMEG, controlOrientationMEG, ...
     twocolumn, plotOptions);
-
-% Companion figure: each network plotted at the single layer/depth whose
-% (purple, orange) point is closest to the human psychophysical mean.
-figAligned = plotFig8Summary(xHuman, yHuman, xMEG, yMEG, hasMEG, ...
-    HSI_depth_all, allNetworks, controlColorMEG, controlOrientationMEG, ...
-    twocolumn, plotOptions, humanMean);
 
 if doSave
     pause(0.1)
     exportgraphics(fig, fullfile(outdir, 'fig8_human_network.pdf'), ...
         'ContentType', 'vector', 'BackgroundColor', 'none');
-    exportgraphics(figAligned, fullfile(outdir, 'fig8_human_network_aligned.pdf'), ...
-        'ContentType', 'vector', 'BackgroundColor', 'none');
+    fprintf('%s successfully saved.\n', 'fig8_human_network.pdf');
 end
 
 %% ------------------------- HUMAN HELPERS --------------------------------
@@ -166,7 +148,7 @@ function D = networkDepthHSI(network, scriptDir)
     % Load one network's threshold summary and return per-layer/depth ratio
     % coordinates (one (purple, orange) point per available depth), preserving
     % stem-first / fully-connected-last layer ordering.
-    network_csv = fullfile(scriptDir, 'data', 'network', network, [network, '_thresholds_stats.csv']);
+    network_csv = fullfile(scriptDir, 'data', 'network', [network, '_thresholds.csv']);
     assert(isfile(network_csv), 'Network CSV not found: %s', network_csv);
 
     N = readtable(network_csv, 'TextType', 'string');
@@ -178,13 +160,14 @@ function D = networkDepthHSI(network, scriptDir)
 
     N.depth = lower(string(N.depth));
     N.refLabel = lower(string(N.quadrant));
-    N.dir = lower(string(N.direction));
+    N.axis = lower(string(N.hue_chroma));
+    N.sign = lower(string(N.direction));
 
-    % Preserve useful layer ordering: stem first, fully connected last.
+    % Preserve useful layer ordering: first layer first, final layer last.
     depths = unique(N.depth, 'stable');
-    dmid = setdiff(depths, ["stem","fc"], 'stable');
-    if any(depths == "stem"), dmid = ["stem"; dmid]; end
-    if any(depths == "fc"), dmid = [dmid; "fc"]; end
+    dmid = setdiff(depths, ["layer_1","final_layer"], 'stable');
+    if any(depths == "layer_1"), dmid = ["layer_1"; dmid]; end
+    if any(depths == "final_layer"), dmid = [dmid; "final_layer"]; end
     depths = dmid;
 
     xVals = [];
@@ -233,16 +216,16 @@ function Sdepth = networkThresholdStruct(Nrows)
     for i = 1:numel(refs)
         r = refs(i);
         R = Nrows(Nrows.refLabel == r, :);
-        Sdepth.(r).chroma.pos = getDirStats(R, "chroma_plus");
-        Sdepth.(r).chroma.neg = getDirStats(R, "chroma_minus");
-        Sdepth.(r).hue.pos = getDirStats(R, "hue_plus");
-        Sdepth.(r).hue.neg = getDirStats(R, "hue_minus");
+        Sdepth.(r).chroma.pos = getDirStats(R, "chroma", "pos");
+        Sdepth.(r).chroma.neg = getDirStats(R, "chroma", "neg");
+        Sdepth.(r).hue.pos = getDirStats(R, "hue", "pos");
+        Sdepth.(r).hue.neg = getDirStats(R, "hue", "neg");
     end
 end
 
-function st = getDirStats(T, dirName)
-    % Extract the mean threshold for one named DKL direction.
-    idx = lower(string(T.dir)) == dirName;
+function st = getDirStats(T, axisName, signName)
+    % Extract the mean threshold for one hue/chroma axis and pos/neg sign.
+    idx = T.axis == axisName & T.sign == signName;
     st.mean = mean(T.threshold_mean(idx), 'omitnan');
 end
 

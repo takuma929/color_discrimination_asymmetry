@@ -11,13 +11,8 @@ function [rgb] = fromDKL(dkl,trim)
     maxval = max(max(abs(rgb)));
     if trim==0
     if maxval > 0.5
-        if maxval < .5 + .000001
-            fprintf('very small epsilon\n')
-        end
-    %     error('Out of Range')
-    %    fprintf('fromDKL: out of range error maxval=%g dkl = %g %g %g rgb = %g %g %g\n', maxval, dkl(1), dkl(2), dkl(3), rgb(1), rgb(2), rgb(3));
+        % Rescale out-of-gamut values back into range.
         rgb = rgb/(2*maxval);
-       fprintf('CORRECTED rgb: %g %g %g\n', rgb(1), rgb(2), rgb(3));
     end
     end
     

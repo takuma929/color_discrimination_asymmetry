@@ -114,6 +114,16 @@ polyHumanMean.orange = diamondPoly(refDKL.orange, ...
 % Human hue-chroma ratio values for panel C.
 [~, xHuman, yHuman, xHumanMean, yHumanMean, xHumanSE, yHumanSE] = humanHSI(T);
 
+% Manuscript statistic: log10 hue/chroma sensitivity ratios are larger for
+% orange (yHuman) than purple (xHuman). Two-tailed paired t-test across
+% participants, with the 95% CI of the orange-minus-purple difference.
+[~, pRatio, ciRatio, statRatio] = ttest(yHuman, xHuman);
+dRatio = mean(yHuman - xHuman, 'omitnan') / std(yHuman - xHuman, 'omitnan');
+fprintf(['Human hue/chroma sensitivity ratio (log10): orange = %.3f, purple = %.3f; ', ...
+    'two-tailed paired t(%d) = %.2f, p = %.3g, 95%% CI [%.3f, %.3f], Cohen''s d = %.2f\n'], ...
+    mean(yHuman, 'omitnan'), mean(xHuman, 'omitnan'), statRatio.df, statRatio.tstat, ...
+    pRatio, ciRatio(1), ciRatio(2), dRatio);
+
 %% ------------------------- SEPARATE FIGURES -----------------------------
 
 % Create each requested plot in a separate figure, matching the behavior of the
@@ -146,14 +156,20 @@ axC.Position = [1.1 1.0 6.6 6.6];
 % Save vector and raster versions of each separate figure.
 if doSave
     pause(0.1)
-    exportgraphics(figA, fullfile(outdir, sprintf('fig3a_human_individuals_N%d.pdf', numel(ptList))), ...
+    nameA = sprintf('fig3a_human_individuals_N%d.pdf', numel(ptList));
+    exportgraphics(figA, fullfile(outdir, nameA), ...
         'ContentType', 'vector', 'BackgroundColor', 'none');
+    fprintf('%s successfully saved.\n', nameA);
 
-    exportgraphics(figB, fullfile(outdir, sprintf('fig3b_human_mean_N%d.pdf', numel(ptList))), ...
+    nameB = sprintf('fig3b_human_mean_N%d.pdf', numel(ptList));
+    exportgraphics(figB, fullfile(outdir, nameB), ...
         'ContentType', 'vector', 'BackgroundColor', 'none');
+    fprintf('%s successfully saved.\n', nameB);
 
-    exportgraphics(figC, fullfile(outdir, sprintf('fig3c_human_scatter_hue_chroma_ratio_N%d.pdf', numel(xHuman))), ...
+    nameC = sprintf('fig3c_human_scatter_hue_chroma_ratio_N%d.pdf', numel(xHuman));
+    exportgraphics(figC, fullfile(outdir, nameC), ...
         'ContentType', 'vector', 'BackgroundColor', 'none');
+    fprintf('%s successfully saved.\n', nameC);
 end
 
 %% ------------------------- LOCAL PLOTTING FUNCTIONS ---------------------
