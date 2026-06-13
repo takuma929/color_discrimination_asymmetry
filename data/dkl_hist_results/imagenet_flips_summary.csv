@@ -1,0 +1,2 @@
+dataset,n_images,n_total_pixels,n_valid_pixels
+imagenet,1431167,315672560598,251651048659

@@ -1,0 +1,20 @@
+# macOS
+.DS_Store
+
+# MATLAB
+*.asv
+*.m~
+*.mex*
+slprj/
+octave-workspace
+
+# Editors / IDEs
+.idea/
+.vscode/
+
+# Reference figure outputs in figs/ ARE tracked so the expected results are
+# visible without running the code. Re-running the scripts overwrites them.
+
+# Large intermediate images are not tracked; only aggregated data is committed.
+# Raw stimulus/output images live in the external data archive (see README).
+data/**/*.png
