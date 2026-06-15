@@ -92,14 +92,14 @@ end
 
 function mask = localSignificantMask(dec, expIdx, refName, axisName, stepLevel, timeSec, accDims, dimLevs) %#ok<INUSD>
     % Significant time points (p < 0.05) for one condition, read from the stats
-    % stored in dec.acc_stats. acc_stats is a per-experiment cell of
+    % stored in dec.acc_statsAcc. acc_statsAcc is a per-experiment cell of
     % (quad x hc x step) structs, each with a time-resolved p-value field .prob.
     mask = false(numel(timeSec), 1);
-    if ~isfield(dec, 'acc_stats')
+    if ~isfield(dec, 'acc_statsAcc')
         return
     end
 
-    S = dec.acc_stats;
+    S = dec.acc_statsAcc;
     if iscell(S)
         if numel(S) < expIdx || isempty(S{expIdx})
             return
@@ -135,7 +135,7 @@ function mask = localSignificantMask(dec, expIdx, refName, axisName, stepLevel, 
 end
 
 function idx = localStatsLevelIndex(~, fieldName, levelName)
-    % acc_stats has a fixed (quad, hc, step) layout, verified against acc_agg:
+    % acc_statsAcc has a fixed (quad, hc, step) layout, verified against acc_agg:
     %   quad = [purple, orange], hc = [hue, chroma].
     switch lower(string(fieldName))
         case "quad"
@@ -149,7 +149,7 @@ function idx = localStatsLevelIndex(~, fieldName, levelName)
 end
 
 function idx = localStatsStepIndex(~, stepLevel)
-    % Steps are stored in order 1, 2, 3 along the acc_stats step dimension.
+    % Steps are stored in order 1, 2, 3 along the acc_statsAcc step dimension.
     idx = double(stepLevel);
 end
 

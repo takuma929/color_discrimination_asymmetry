@@ -79,7 +79,7 @@ for iCond = 1:numel(conditions)
     end
 end
 
-ratio = localBuildRatioTimecourses(tc);
+ratio = localBuildRatioTimecourses(tc, dec, expIdx, timeSec);
 
 %% ------------------------- PLOT -----------------------------------------
 
@@ -125,12 +125,12 @@ function subjByTime = localConditionAccuracy(acc, accDims, dimLevs, timeDim, ref
     end
 end
 
-function ratio = localBuildRatioTimecourses(tc)
+function ratio = localBuildRatioTimecourses(tc, dec, expIdx, timeSec)
     names = ["purple", "orange"];
     cols = struct();
     cols.purple = [0.52 0.16 0.86; 0.50 0.54 1.00; 0.68 0.60 0.84];
     cols.orange = [0.82 0.38 0.10; 1.00 0.45 0.00; 1.00 0.60 0.00];
-    ratio = struct('label', {}, 'y', {}, 'color', {});
+    ratio = struct('label', {}, 'y', {}, 'color', {}, 'sig', {});
     for iRef = 1:numel(names)
         ref = names(iRef);
         hue = tc.(char(ref + "_hue")).subjByTime ./ 100;
@@ -141,20 +141,65 @@ function ratio = localBuildRatioTimecourses(tc)
             ratio(end+1).label = sprintf('%s step %d', ref, iStep); %#ok<AGROW>
             ratio(end).y = y(:, iStep);
             ratio(end).color = cols.(char(ref))(iStep, :);
+            % Significant time points (p < 0.05) of the log-odds-ratio, from the
+            % cluster-based permutation test stored in dec.acc_statsLOR.
+            ratio(end).sig = localSignificantMaskLOR(dec, expIdx, ref, iStep, timeSec);
         end
     end
 end
 
-function mask = localSignificantMask(dec, expIdx, refName, axisName, stepLevel, timeSec, accDims, dimLevs) %#ok<INUSD>
-    % Significant time points (p < 0.05) for one condition, read from the stats
-    % stored in dec.acc_stats. acc_stats is a per-experiment cell of
-    % (quad x hc x step) structs, each with a time-resolved p-value field .prob.
+function mask = localSignificantMaskLOR(dec, expIdx, refName, stepLevel, timeSec)
+    % Significant time points (p < 0.05) for one hue/chroma log-odds-ratio line,
+    % read from dec.acc_statsLOR. acc_statsLOR is a per-experiment cell of
+    % (quad x step) structs, each with a time-resolved p-value field .prob.
     mask = false(numel(timeSec), 1);
-    if ~isfield(dec, 'acc_stats')
+    if ~isfield(dec, 'acc_statsLOR')
         return
     end
 
-    S = dec.acc_stats;
+    S = dec.acc_statsLOR;
+    if iscell(S)
+        if numel(S) < expIdx || isempty(S{expIdx})
+            return
+        end
+        S = S{expIdx};
+    end
+
+    % Drop singleton dimensions so the array is (quad, step).
+    S = squeeze(S);
+
+    quadIdx = localStatsLevelIndex(dec, 'quad', refName);
+    stepIdx = localStatsStepIndex(dec, stepLevel);
+    if isempty(quadIdx) || isempty(stepIdx)
+        return
+    end
+    if quadIdx > size(S, 1) || stepIdx > size(S, 2)
+        return
+    end
+
+    if iscell(S)
+        s = S{quadIdx, stepIdx};
+    else
+        s = S(quadIdx, stepIdx);
+    end
+    if ~isstruct(s) || ~isfield(s, 'prob')
+        return
+    end
+    p = double(s.prob(:));
+    n = min(numel(p), numel(timeSec));
+    mask(1:n) = p(1:n) < 0.05;
+end
+
+function mask = localSignificantMask(dec, expIdx, refName, axisName, stepLevel, timeSec, accDims, dimLevs) %#ok<INUSD>
+    % Significant time points (p < 0.05) for one condition, read from the stats
+    % stored in dec.acc_statsAcc. acc_statsAcc is a per-experiment cell of
+    % (quad x hc x step) structs, each with a time-resolved p-value field .prob.
+    mask = false(numel(timeSec), 1);
+    if ~isfield(dec, 'acc_statsAcc')
+        return
+    end
+
+    S = dec.acc_statsAcc;
     if iscell(S)
         if numel(S) < expIdx || isempty(S{expIdx})
             return
@@ -190,7 +235,7 @@ function mask = localSignificantMask(dec, expIdx, refName, axisName, stepLevel, 
 end
 
 function idx = localStatsLevelIndex(~, fieldName, levelName)
-    % acc_stats has a fixed (quad, hc, step) layout, verified against acc_agg:
+    % acc_statsAcc has a fixed (quad, hc, step) layout, verified against acc_agg:
     %   quad = [purple, orange], hc = [hue, chroma].
     switch lower(string(fieldName))
         case "quad"
@@ -204,7 +249,7 @@ function idx = localStatsLevelIndex(~, fieldName, levelName)
 end
 
 function idx = localStatsStepIndex(~, stepLevel)
-    % Steps are stored in order 1, 2, 3 along the acc_stats step dimension.
+    % Steps are stored in order 1, 2, 3 along the acc_statsAcc step dimension.
     idx = double(stepLevel);
 end
 
@@ -245,17 +290,32 @@ function localPlotRatioPanel(ax, timeMs, ratio, plotTimeMs)
     yline(ax, 0, ':', 'Color', [0.25 0.25 0.25], 'LineWidth', 0.8);
     xline(ax, 0, '-', 'Color', 'k', 'LineWidth', 0.8);
     xlim(ax, plotTimeMs);
-    ylim(ax, [-0.10 0.35]);
+    % The y-axis is extended below -0.10 to make room for a strip of
+    % significance bars; the labelled tick range is unchanged.
+    ylim(ax, [-0.16 0.35]);
     xticks(ax, -250:250:1500);
     ratioTicks = -0.10:0.10:0.30;
     yticks(ax, ratioTicks);
     yticklabels(ax, compose('%.2f', ratioTicks));
     xlabel(ax, 'Time [ms]', 'FontWeight', 'bold');
     ylabel(ax, 'log-odds-ratio of decoding accuracy', 'FontWeight', 'bold');
+
+    % Significance bars (cluster-based permutation test on the log-odds-ratio,
+    % dec.acc_statsLOR) drawn in a strip below the data, one per line.
+    sigBase = -0.105;
+    sigSpacing = 0.0095;
+    for iLine = 1:numel(ratio)
+        localDrawSigBars(ax, timeMs, ratio(iLine).sig, sigBase - sigSpacing * (iLine - 1), ...
+            ratio(iLine).color, plotTimeMs, 2);
+    end
+
     localStyleTimeAxis(ax);
 end
 
-function localDrawSigBars(ax, timeMs, mask, y, col, plotTimeMs)
+function localDrawSigBars(ax, timeMs, mask, y, col, plotTimeMs, lineWidth)
+    if nargin < 7 || isempty(lineWidth)
+        lineWidth = 3;
+    end
     mask = mask(:)' & timeMs >= min(plotTimeMs) & timeMs <= max(plotTimeMs);
     if ~any(mask)
         return
@@ -265,7 +325,7 @@ function localDrawSigBars(ax, timeMs, mask, y, col, plotTimeMs)
     stops = find(d == -1) - 1;
     for iRun = 1:numel(starts)
         plot(ax, [timeMs(starts(iRun)) timeMs(stops(iRun))], [y y], '-', ...
-        'Color', col, 'LineWidth', 3, 'Clipping', 'off');
+        'Color', col, 'LineWidth', lineWidth, 'Clipping', 'off');
     end
 end
 

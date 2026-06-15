@@ -163,7 +163,8 @@ above.
 | --- | --- | --- |
 | `acc_agg` | 1×3 cell | Per-participant decoding accuracy. Each cell is `time × quad × hc × direc × step × pt` = `241 × 2 × 2 × 2 × 3 × N` |
 | `acc_gav` | 1×3 cell | Grand-average over participants: `time × quad × hc × direc × step` = `241 × 2 × 2 × 2 × 3` |
-| `acc_stats` | 1×3 cell | Cluster-based statistics per condition |
+| `acc_statsAcc` | 1×3 cell | Cluster-based permutation statistics on decoding accuracy, per `(quad × hc × step)` condition (each a struct with a time-resolved p-value field `prob`) |
+| `acc_statsLOR` | 1×3 cell | Cluster-based permutation statistics on the hue/chroma log-odds-ratio, per `(quad × step)` condition (same struct layout) |
 | `pts`, `ptInds` | 1×3 cell | Participant IDs and indices |
 | `accTime` | 1×241 | Time axis in seconds (−0.5 to 1.5 s relative to stimulus onset) |
 | `accDims` | 1×6 string | Dimension names: `["time","quad","hc","direc","step","pt"]` |
