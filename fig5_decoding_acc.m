@@ -301,11 +301,18 @@ function localPlotRatioPanel(ax, timeMs, ratio, plotTimeMs)
     ylabel(ax, 'log-odds-ratio of decoding accuracy', 'FontWeight', 'bold');
 
     % Significance bars (cluster-based permutation test on the log-odds-ratio,
-    % dec.acc_statsLOR) drawn in a strip below the data, one per line.
-    sigBase = -0.105;
+    % dec.acc_statsLOR) drawn in a strip below the data, one per line. Lines are
+    % grouped by reference (purple above orange) and, within each group, ordered
+    % small -> medium -> large step from bottom to top, matching panels a-d (the
+    % darker, smaller-step color sits below).
+    nStep = 3;
+    sigTop = -0.105;
     sigSpacing = 0.0095;
     for iLine = 1:numel(ratio)
-        localDrawSigBars(ax, timeMs, ratio(iLine).sig, sigBase - sigSpacing * (iLine - 1), ...
+        refGroup = ceil(iLine / nStep);                 % 1 = purple, 2 = orange
+        stepInGroup = iLine - (refGroup - 1) * nStep;   % 1 = small ... 3 = large
+        rowFromTop = (refGroup - 1) * nStep + (nStep - stepInGroup);
+        localDrawSigBars(ax, timeMs, ratio(iLine).sig, sigTop - sigSpacing * rowFromTop, ...
             ratio(iLine).color, plotTimeMs, 2);
     end
 
