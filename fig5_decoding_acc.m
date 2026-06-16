@@ -133,6 +133,9 @@ function ratio = localBuildRatioTimecourses(tc, dec, expIdx, timeSec)
     ratio = struct('label', {}, 'y', {}, 'color', {}, 'sig', {});
     for iRef = 1:numel(names)
         ref = names(iRef);
+        % subjByTime is (participant x time x step). The log-odds-ratio is formed
+        % per participant and per time point, then averaged across participants
+        % (not the other way around), so the line matches the acc_statsLOR test.
         hue = tc.(char(ref + "_hue")).subjByTime ./ 100;
         chroma = tc.(char(ref + "_chroma")).subjByTime ./ 100;
         participantRatio = log10(localOdds(hue) ./ localOdds(chroma));

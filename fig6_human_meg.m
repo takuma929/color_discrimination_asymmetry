@@ -203,8 +203,11 @@ function [xVals, yVals] = decodingAccuracyLogOddsForExperiment(dec, expIdx, time
     orangeHue = extractParticipantAccuracy(acc, refDim, axisDim, participantDim, orangeIdx, hueIdx);
     orangeChroma = extractParticipantAccuracy(acc, refDim, axisDim, participantDim, orangeIdx, chromaIdx);
 
-    % Convert averaged accuracies to log10 odds ratios. Accuracy is clipped away
-    % from 0 and 1 so the odds transform remains finite.
+    % Log10 hue/chroma odds ratio computed per participant: each input is one
+    % participant's time-averaged accuracy, so the ratio is formed per
+    % participant and only later averaged across participants (this matches the
+    % statistics). Accuracy is clipped away from 0 and 1 so the odds transform
+    % remains finite.
     xVals = log10(localOdds(purpleHue) ./ localOdds(purpleChroma));
     yVals = log10(localOdds(orangeHue) ./ localOdds(orangeChroma));
 end
@@ -425,8 +428,10 @@ function odds = localOdds(acc)
 end
 
 function vals = extractParticipantAccuracy(A, refDim, axisDim, participantDim, refIdx, axisIdx)
-    % Return one averaged accuracy value per participant for a reference/axis
-    % pair. All dimensions except participant are either selected or averaged.
+    % Return one per-participant, time-averaged accuracy value for a
+    % reference/axis pair. Every dimension except the participant dimension is
+    % selected or averaged, so the participant dimension is retained and ratios
+    % can be computed per participant.
 
     A = selectAlongDimension(A, refDim, refIdx);
     A = selectAlongDimension(A, axisDim, axisIdx);
